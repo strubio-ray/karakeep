@@ -373,6 +373,18 @@ async function getIds(
           ),
         );
     }
+    case "source": {
+      const comp = matcher.inverse ? ne : eq;
+      return db
+        .select({ id: bookmarks.id })
+        .from(bookmarks)
+        .where(
+          and(
+            eq(bookmarks.userId, userId),
+            comp(bookmarks.source, matcher.source),
+          ),
+        );
+    }
     case "and": {
       const vals = await Promise.all(
         matcher.matchers.map((m) => getIds(db, userId, m)),
