@@ -48,3 +48,15 @@ jobs:
           # or https://code.claude.com/docs/en/cli-reference for available options
           # claude_args: '--allowed-tools Bash(gh pr:*)'
 
+          # Optional: Allow Claude to run specific commands
+          allowed_tools: "Bash(pnpm install),Bash(pnpm typecheck),Bash(pnpm test),Bash(pnpm lint:fix)"
+
+          # Optional: Add custom instructions for Claude to customize its behavior for your project
+          custom_instructions: |
+            Please review this pull request and look for bugs and security issues.
+            Only report on bugs and potential vulnerabilities you find.
+            Be concise.
+
+          # Optional: Custom environment variables for Claude
+          # claude_env: |
+          #   NODE_ENV: test
