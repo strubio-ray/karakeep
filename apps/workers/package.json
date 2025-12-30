@@ -63,7 +63,9 @@
     "@types/archiver": "^7.0.0",
     "@types/jsdom": "^21.1.6",
     "@types/node-cron": "^3.0.11",
-    "tsdown": "^0.12.9"
+    "tsdown": "^0.12.9",
+    "vite-tsconfig-paths": "^4.3.1",
+    "vitest": "^3.2.4"
   },
   "scripts": {
     "start": "tsx watch index.ts",
@@ -74,7 +76,8 @@
     "lint:fix": "oxlint . --fix",
     "format": "prettier . --cache --ignore-path ../../.prettierignore --check",
     "format:fix": "prettier . --cache --ignore-path ../../.prettierignore --write",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest"
   },
   "prettier": "@karakeep/prettier-config"
 }

@@ -83,6 +83,7 @@ import { getRateLimitClient } from "@karakeep/shared/ratelimiting";
 import { tryCatch } from "@karakeep/shared/tryCatch";
 import { BookmarkTypes } from "@karakeep/shared/types/bookmarks";
 
+import { assertNoLoginRedirect } from "../login-redirect-detection";
 import metascraperAmazonImproved from "../metascraper-plugins/metascraper-amazon-improved";
 import metascraperReddit from "../metascraper-plugins/metascraper-reddit";
 
@@ -1226,6 +1227,24 @@ async function crawlAndParseUrl(
     abortPromise(abortSignal),
   ]);
   abortSignal.throwIfAborted();
+
+  // Check for login redirect (e.g., Instagram redirecting to login page)
+  logger.info(`[Crawler][${jobId}] Checking for login redirect...`);
+  assertNoLoginRedirect(
+    url, // original URL
+    browserUrl, // final URL after redirects
+    {
+      title: meta.title,
+      description: meta.description,
+      image: meta.image,
+      url: meta.url, // og:url
+      author: meta.author,
+      publisher: meta.publisher,
+      logo: meta.logo,
+    },
+    htmlContent,
+  );
+  logger.info(`[Crawler][${jobId}] No login redirect detected.`);
 
   let readableContent: { content: string } | null = meta.readableContentHtml
     ? { content: meta.readableContentHtml }
