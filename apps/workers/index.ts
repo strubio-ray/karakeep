@@ -76,7 +76,7 @@ async function main() {
     const skippedDomains = serverConfig.crawler.skippedDomains ?? [];
     // Create idempotency key based on date and config hash
     // This ensures: same config + same day = one execution, config changes = new execution
-    const configHash = skippedDomains.sort().join(",");
+    const configHash = [...skippedDomains].sort().join(",");
     const today = new Date().toISOString().split("T")[0];
     const idempotencyKey = `requeue_skipped_domains:${today}:${configHash}`;
 

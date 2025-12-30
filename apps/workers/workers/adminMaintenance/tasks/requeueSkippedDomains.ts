@@ -1,4 +1,4 @@
-import { and, asc, eq, gt } from "drizzle-orm";
+import { and, asc, eq, gt, inArray } from "drizzle-orm";
 
 import { db } from "@karakeep/db";
 import { bookmarkLinks, bookmarks } from "@karakeep/db/schema";
@@ -13,6 +13,7 @@ import { BookmarkTypes } from "@karakeep/shared/types/bookmarks";
 import { shouldSkipDomain } from "../../../network";
 
 const BATCH_SIZE = 100;
+const PROGRESS_LOG_INTERVAL = 100;
 
 export async function runRequeueSkippedDomainsTask(
   job: DequeuedJob<ZAdminMaintenanceRequeueSkippedDomainsTask>,
@@ -23,6 +24,7 @@ export async function runRequeueSkippedDomainsTask(
   );
 
   let requeuedCount = 0;
+  let processedCount = 0;
   let cursor: string | undefined;
 
   while (!job.abortSignal.aborted) {
@@ -55,27 +57,29 @@ export async function runRequeueSkippedDomainsTask(
       break;
     }
 
-    for (const bookmark of skippedBookmarks) {
-      if (job.abortSignal.aborted) {
-        logger.warn(
-          `[adminMaintenance:requeue_skipped_domains][${jobId}] Aborted`,
-        );
-        break;
-      }
+    if (job.abortSignal.aborted) {
+      logger.warn(
+        `[adminMaintenance:requeue_skipped_domains][${jobId}] Aborted`,
+      );
+      break;
+    }
 
-      // Check if domain is still in skip list
-      if (!shouldSkipDomain(bookmark.url)) {
-        logger.info(
-          `[adminMaintenance:requeue_skipped_domains][${jobId}] Re-queuing bookmark ${bookmark.id} (URL: ${bookmark.url}) - domain no longer in skip list`,
-        );
+    // Filter bookmarks whose domains are no longer in the skip list
+    const bookmarksToRequeue = skippedBookmarks.filter(
+      (bookmark) => !shouldSkipDomain(bookmark.url),
+    );
 
-        // Update status to pending
-        await db
-          .update(bookmarkLinks)
-          .set({ crawlStatus: "pending" })
-          .where(eq(bookmarkLinks.id, bookmark.id));
+    if (bookmarksToRequeue.length > 0) {
+      const idsToUpdate = bookmarksToRequeue.map((b) => b.id);
 
-        // Enqueue for crawling with idempotency key to prevent duplicates
+      // Batch update all statuses in a single query
+      await db
+        .update(bookmarkLinks)
+        .set({ crawlStatus: "pending" })
+        .where(inArray(bookmarkLinks.id, idsToUpdate));
+
+      // Enqueue all bookmarks for crawling
+      for (const bookmark of bookmarksToRequeue) {
         await LinkCrawlerQueue.enqueue(
           {
             bookmarkId: bookmark.id,
@@ -86,15 +90,23 @@ export async function runRequeueSkippedDomainsTask(
             groupId: bookmark.userId,
           },
         );
-
-        requeuedCount++;
       }
+
+      requeuedCount += bookmarksToRequeue.length;
     }
 
+    processedCount += skippedBookmarks.length;
     cursor = skippedBookmarks[skippedBookmarks.length - 1]?.id;
+
+    // Log progress periodically
+    if (processedCount % PROGRESS_LOG_INTERVAL === 0) {
+      logger.info(
+        `[adminMaintenance:requeue_skipped_domains][${jobId}] Progress: processed ${processedCount} bookmarks, re-queued ${requeuedCount}`,
+      );
+    }
   }
 
   logger.info(
-    `[adminMaintenance:requeue_skipped_domains][${jobId}] Completed. Re-queued ${requeuedCount} bookmarks`,
+    `[adminMaintenance:requeue_skipped_domains][${jobId}] Completed. Processed ${processedCount} bookmarks, re-queued ${requeuedCount}`,
   );
 }

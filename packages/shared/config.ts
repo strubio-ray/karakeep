@@ -213,7 +213,7 @@ const allEnv = z.object({
     .transform((val) =>
       val
         .split(",")
-        .map((p) => p.trim())
+        .map((p) => p.trim().toLowerCase())
         .filter((p) => p),
     )
     .optional(),
