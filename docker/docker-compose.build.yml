@@ -1,5 +1,6 @@
 services:
-  web:
+  karakeep-web:
+    container_name: karakeep-web
     build:
       dockerfile: docker/Dockerfile
       context: ..
@@ -7,11 +8,25 @@ services:
     restart: unless-stopped
     volumes:
       - data:/data
+      - ../_user_data/instagram-cookies.json:/data/cookies.json:ro
+      - ../_user_data/ytdlp-cookies.txt:/data/ytdlp-cookies.txt
+    ports:
+      - 3000:3000
+    env_file:
+      - .env
     environment:
-      MEILI_ADDR: http://meilisearch:7700
-      BROWSER_WEB_URL: http://chrome:9222
+      MEILI_ADDR: http://karakeep-meilisearch:7700
+      BROWSER_WEB_URL: http://karakeep-chrome:9222
       DATA_DIR: /data
-  chrome:
+
+      BROWSER_COOKIE_PATH: /data/cookies.json
+    networks:
+      - default
+      - shared
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+  karakeep-chrome:
+    container_name: karakeep-chrome
     image: gcr.io/zenika-hub/alpine-chrome:124
     restart: unless-stopped
     command:
@@ -21,14 +36,25 @@ services:
       - --remote-debugging-address=0.0.0.0
       - --remote-debugging-port=9222
       - --hide-scrollbars
-  meilisearch:
+  karakeep-meilisearch:
+    container_name: karakeep-meilisearch
     image: getmeili/meilisearch:v1.13.3
     restart: unless-stopped
+    env_file:
+      - .env
     environment:
-      MEILI_NO_ANALYTICS: "true"
+      MEILI_NO_ANALYTICS: ${MEILI_NO_ANALYTICS}
     volumes:
-      - meilisearch:/meili_data
+      - meilisearch:/meili-data
 
 volumes:
   meilisearch:
+    name: karakeep-meilisearch
   data:
+    name: karakeep-data
+
+# Shared network for cross-service communication
+networks:
+  shared:
+    name: karakeep-suite-shared
+    driver: bridge

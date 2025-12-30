@@ -32,6 +32,7 @@ import {
   fetchWithProxy,
   getRandomProxy,
   matchesNoProxy,
+  shouldSkipDomain,
   validateUrl,
 } from "network";
 import { Browser, BrowserContextOptions } from "playwright";
@@ -1512,6 +1513,41 @@ async function runCrawler(
     contentAssetId: oldContentAssetId,
     precrawledArchiveAssetId,
   } = await getBookmarkDetails(bookmarkId);
+
+  // Check if domain should be skipped
+  if (shouldSkipDomain(url)) {
+    logger.info(
+      `[Crawler][${jobId}] Skipping crawl for "${url}" - domain is in skip list`,
+    );
+    await db
+      .update(bookmarkLinks)
+      .set({ crawlStatus: "skipped" })
+      .where(eq(bookmarkLinks.id, bookmarkId));
+
+    // Clear pending AI tasks since we won't have content to process
+    await db.transaction(async (tx) => {
+      await tx
+        .update(bookmarks)
+        .set({ taggingStatus: null })
+        .where(
+          and(
+            eq(bookmarks.id, bookmarkId),
+            eq(bookmarks.taggingStatus, "pending"),
+          ),
+        );
+      await tx
+        .update(bookmarks)
+        .set({ summarizationStatus: null })
+        .where(
+          and(
+            eq(bookmarks.id, bookmarkId),
+            eq(bookmarks.summarizationStatus, "pending"),
+          ),
+        );
+    });
+
+    return { status: "completed" };
+  }
 
   await checkDomainRateLimit(url, jobId);
 
