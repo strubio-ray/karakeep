@@ -83,7 +83,10 @@ import { getRateLimitClient } from "@karakeep/shared/ratelimiting";
 import { tryCatch } from "@karakeep/shared/tryCatch";
 import { BookmarkTypes } from "@karakeep/shared/types/bookmarks";
 
-import { assertNoLoginRedirect } from "../login-redirect-detection";
+import {
+  assertNoLoginRedirect,
+  LoginRedirectDetectedError,
+} from "../login-redirect-detection";
 import metascraperAmazonImproved from "../metascraper-plugins/metascraper-amazon-improved";
 import metascraperReddit from "../metascraper-plugins/metascraper-reddit";
 
@@ -1545,65 +1548,109 @@ async function runCrawler(
       job.abortSignal,
     );
   } else {
-    const archivalLogic = await crawlAndParseUrl(
-      url,
-      userId,
-      jobId,
-      bookmarkId,
-      oldScreenshotAssetId,
-      oldPdfAssetId,
-      oldImageAssetId,
-      oldFullPageArchiveAssetId,
-      oldContentAssetId,
-      precrawledArchiveAssetId,
-      archiveFullPage,
-      storePdf ?? false,
-      job.abortSignal,
-    );
-
-    // Propagate priority to child jobs
-    const enqueueOpts: EnqueueOptions = {
-      priority: job.priority,
-      groupId: userId,
-    };
-
-    // Enqueue openai job (if not set, assume it's true for backward compatibility)
-    if (job.data.runInference !== false) {
-      await OpenAIQueue.enqueue(
-        {
-          bookmarkId,
-          type: "tag",
-        },
-        enqueueOpts,
+    try {
+      const archivalLogic = await crawlAndParseUrl(
+        url,
+        userId,
+        jobId,
+        bookmarkId,
+        oldScreenshotAssetId,
+        oldPdfAssetId,
+        oldImageAssetId,
+        oldFullPageArchiveAssetId,
+        oldContentAssetId,
+        precrawledArchiveAssetId,
+        archiveFullPage,
+        storePdf ?? false,
+        job.abortSignal,
       );
-      await OpenAIQueue.enqueue(
-        {
-          bookmarkId,
-          type: "summarize",
-        },
-        enqueueOpts,
-      );
+
+      // Propagate priority to child jobs
+      const enqueueOpts: EnqueueOptions = {
+        priority: job.priority,
+        groupId: userId,
+      };
+
+      // Enqueue openai job (if not set, assume it's true for backward compatibility)
+      if (job.data.runInference !== false) {
+        await OpenAIQueue.enqueue(
+          {
+            bookmarkId,
+            type: "tag",
+          },
+          enqueueOpts,
+        );
+        await OpenAIQueue.enqueue(
+          {
+            bookmarkId,
+            type: "summarize",
+          },
+          enqueueOpts,
+        );
+      }
+
+      // Update the search index
+      await triggerSearchReindex(bookmarkId, enqueueOpts);
+
+      if (serverConfig.crawler.downloadVideo) {
+        // Trigger a potential download of a video from the URL
+        await VideoWorkerQueue.enqueue(
+          {
+            bookmarkId,
+            url,
+          },
+          enqueueOpts,
+        );
+      }
+
+      // Trigger a webhook
+      await triggerWebhook(bookmarkId, "crawled", undefined, enqueueOpts);
+
+      // Do the archival as a separate last step as it has the potential for failure
+      await archivalLogic();
+    } catch (e) {
+      // Login redirect errors should fail immediately without retries
+      // (retrying won't help - the page requires authentication)
+      if (e instanceof LoginRedirectDetectedError) {
+        logger.warn(
+          `[Crawler][${jobId}] Login redirect detected for "${url}": ${e.message}`,
+        );
+        await db.transaction(async (tx) => {
+          await tx
+            .update(bookmarkLinks)
+            .set({
+              crawlStatus: "failure",
+            })
+            .where(eq(bookmarkLinks.id, bookmarkId));
+          await tx
+            .update(bookmarks)
+            .set({
+              taggingStatus: null,
+            })
+            .where(
+              and(
+                eq(bookmarks.id, bookmarkId),
+                eq(bookmarks.taggingStatus, "pending"),
+              ),
+            );
+          await tx
+            .update(bookmarks)
+            .set({
+              summarizationStatus: null,
+            })
+            .where(
+              and(
+                eq(bookmarks.id, bookmarkId),
+                eq(bookmarks.summarizationStatus, "pending"),
+              ),
+            );
+        });
+        // Return successfully to prevent retries
+        return { status: "completed" };
+      }
+      // Re-throw other errors to trigger normal retry behavior
+      throw e;
     }
-
-    // Update the search index
-    await triggerSearchReindex(bookmarkId, enqueueOpts);
-
-    if (serverConfig.crawler.downloadVideo) {
-      // Trigger a potential download of a video from the URL
-      await VideoWorkerQueue.enqueue(
-        {
-          bookmarkId,
-          url,
-        },
-        enqueueOpts,
-      );
-    }
-
-    // Trigger a webhook
-    await triggerWebhook(bookmarkId, "crawled", undefined, enqueueOpts);
-
-    // Do the archival as a separate last step as it has the potential for failure
-    await archivalLogic();
   }
   return { status: "completed" };
 }

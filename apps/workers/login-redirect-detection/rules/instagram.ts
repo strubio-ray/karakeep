@@ -99,13 +99,23 @@ const instagramSignals: DetectionSignal[] = [
     description: "Page contains prominent login/signup buttons",
     weight: 1,
     check: (ctx) => {
-      const html = ctx.htmlContent.toLowerCase();
-      // Check for common Instagram login page indicators
-      // Login page has all three: log in, sign up, forgot password
+      const $ = ctx.$;
+
+      // Extract visible text only (exclude script/style/noscript content)
+      // This prevents false positives from matching text in JS code
+      const visibleText = $("body")
+        .clone()
+        .find("script, style, noscript")
+        .remove()
+        .end()
+        .text()
+        .toLowerCase();
+
+      // Instagram login pages have all three: log in, sign up, forgot password
       return (
-        html.includes("log in") &&
-        html.includes("sign up") &&
-        html.includes("forgot password")
+        visibleText.includes("log in") &&
+        visibleText.includes("sign up") &&
+        visibleText.includes("forgot password")
       );
     },
   },

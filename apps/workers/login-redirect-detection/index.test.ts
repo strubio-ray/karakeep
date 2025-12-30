@@ -207,4 +207,159 @@ describe("Login Redirect Detection", () => {
       }
     });
   });
+
+  describe("False Positive Prevention", () => {
+    it("does not trigger login-button-present when text is only in script tags", () => {
+      // Login text only appears in JavaScript code, not visible content
+      const htmlWithScriptOnly = `
+        <html>
+          <head><title>@user on Instagram: "Post caption"</title></head>
+          <body>
+            <article><time datetime="2024-01-01"></time></article>
+            <script>
+              const labels = { login: "log in", signup: "sign up", forgot: "forgot password" };
+            </script>
+          </body>
+        </html>
+      `;
+
+      const result = detectLoginRedirect(
+        "https://www.instagram.com/p/ABC123/",
+        "https://www.instagram.com/p/ABC123/",
+        {
+          title: '@user on Instagram: "Post caption"',
+          url: "https://www.instagram.com/p/ABC123/",
+        },
+        htmlWithScriptOnly,
+      );
+
+      expect(result.isLoginRedirect).toBe(false);
+    });
+
+    it("does not trigger login-button-present when text is only in style tags", () => {
+      const htmlWithStyleOnly = `
+        <html>
+          <head><title>@user on Instagram: "Post caption"</title></head>
+          <body>
+            <article><time datetime="2024-01-01"></time></article>
+            <style>
+              /* log in sign up forgot password */
+              .button { color: red; }
+            </style>
+          </body>
+        </html>
+      `;
+
+      const result = detectLoginRedirect(
+        "https://www.instagram.com/p/ABC123/",
+        "https://www.instagram.com/p/ABC123/",
+        {
+          title: '@user on Instagram: "Post caption"',
+          url: "https://www.instagram.com/p/ABC123/",
+        },
+        htmlWithStyleOnly,
+      );
+
+      expect(result.isLoginRedirect).toBe(false);
+    });
+
+    it("does not trigger login-button-present when text is only in noscript tags", () => {
+      const htmlWithNoscriptOnly = `
+        <html>
+          <head><title>@user on Instagram: "Post caption"</title></head>
+          <body>
+            <article><time datetime="2024-01-01"></time></article>
+            <noscript>
+              log in sign up forgot password
+            </noscript>
+          </body>
+        </html>
+      `;
+
+      const result = detectLoginRedirect(
+        "https://www.instagram.com/p/ABC123/",
+        "https://www.instagram.com/p/ABC123/",
+        {
+          title: '@user on Instagram: "Post caption"',
+          url: "https://www.instagram.com/p/ABC123/",
+        },
+        htmlWithNoscriptOnly,
+      );
+
+      expect(result.isLoginRedirect).toBe(false);
+    });
+  });
+
+  describe("Browser URL Validation", () => {
+    it("handles empty browserUrl gracefully", () => {
+      const result = detectLoginRedirect(
+        "https://www.instagram.com/p/ABC123/",
+        "",
+        {
+          title: "Instagram",
+          url: "https://www.instagram.com/",
+        },
+        loginPageHtml,
+      );
+
+      // Should still detect based on originalUrl
+      expect(result.isLoginRedirect).toBe(true);
+    });
+
+    it("handles about:blank browserUrl gracefully", () => {
+      const result = detectLoginRedirect(
+        "https://www.instagram.com/p/ABC123/",
+        "about:blank",
+        {
+          title: "Instagram",
+          url: "https://www.instagram.com/",
+        },
+        loginPageHtml,
+      );
+
+      // Should still detect based on originalUrl
+      expect(result.isLoginRedirect).toBe(true);
+    });
+
+    it("handles javascript: browserUrl gracefully", () => {
+      const result = detectLoginRedirect(
+        "https://www.instagram.com/p/ABC123/",
+        "javascript:void(0)",
+        {
+          title: "Instagram",
+          url: "https://www.instagram.com/",
+        },
+        loginPageHtml,
+      );
+
+      // Should still detect based on originalUrl
+      expect(result.isLoginRedirect).toBe(true);
+    });
+
+    it("uses browserUrl when originalUrl does not match but browserUrl does", () => {
+      // originalUrl is not Instagram, but browserUrl is (redirect scenario)
+      const result = detectLoginRedirect(
+        "https://example.com/instagram-redirect",
+        "https://www.instagram.com/accounts/login/",
+        {
+          title: "Instagram",
+          url: "https://www.instagram.com/",
+        },
+        loginPageHtml,
+      );
+
+      expect(result.isLoginRedirect).toBe(true);
+    });
+
+    it("returns false when neither URL matches any rule", () => {
+      const result = detectLoginRedirect(
+        "https://example.com/page",
+        "about:blank",
+        { title: "Example Page" },
+        "<html><head><title>Example Page</title></head></html>",
+      );
+
+      expect(result.isLoginRedirect).toBe(false);
+    });
+  });
 });

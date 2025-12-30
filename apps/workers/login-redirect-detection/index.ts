@@ -8,6 +8,18 @@ import type {
 import { findRuleForUrl } from "./rules";
 
 export { loginRedirectRules, findRuleForUrl } from "./rules";
+
+/**
+ * Check if a URL is a valid HTTP/HTTPS URL.
+ */
+function isValidHttpUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
 export type {
   LoginRedirectContext,
   LoginRedirectDetectionResult,
@@ -17,8 +29,10 @@ export type {
 
 /**
  * Error thrown when a login redirect is detected.
- * This error is designed to be caught by the crawler's onError handler,
- * which will set crawlStatus to "failure" and allow for retry.
+ * This error is caught directly in runCrawler() and handled gracefully:
+ * - Sets crawlStatus to "failure"
+ * - Clears pending tagging/summarization status
+ * - Returns successfully to prevent retries (since retrying won't help)
  */
 export class LoginRedirectDetectedError extends Error {
   constructor(
@@ -103,7 +117,10 @@ export function detectLoginRedirect(
   htmlContent: string,
 ): LoginRedirectDetectionResult {
   // Find applicable rule - check both original and final URLs
-  const rule = findRuleForUrl(originalUrl) ?? findRuleForUrl(browserUrl);
+  // Only use browserUrl if it's a valid HTTP/HTTPS URL (not about:blank, javascript:, etc.)
+  const rule =
+    findRuleForUrl(originalUrl) ??
+    (isValidHttpUrl(browserUrl) ? findRuleForUrl(browserUrl) : undefined);
 
   if (!rule) {
     // No rule for this site, assume not a login redirect
