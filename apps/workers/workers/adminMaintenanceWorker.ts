@@ -3,6 +3,7 @@ import { workerStatsCounter } from "metrics";
 import {
   AdminMaintenanceQueue,
   ZAdminMaintenanceMigrateLargeLinkHtmlTask,
+  ZAdminMaintenanceRequeueSkippedDomainsTask,
   ZAdminMaintenanceTask,
   zAdminMaintenanceTaskSchema,
   ZAdminMaintenanceTidyAssetsTask,
@@ -11,6 +12,7 @@ import logger from "@karakeep/shared/logger";
 import { DequeuedJob, getQueueClient } from "@karakeep/shared/queueing";
 
 import { runMigrateLargeLinkHtmlTask } from "./adminMaintenance/tasks/migrateLinkHtmlContent";
+import { runRequeueSkippedDomainsTask } from "./adminMaintenance/tasks/requeueSkippedDomains";
 import { runTidyAssetsTask } from "./adminMaintenance/tasks/tidyAssets";
 
 export class AdminMaintenanceWorker {
@@ -79,6 +81,10 @@ async function runAdminMaintenance(job: DequeuedJob<ZAdminMaintenanceTask>) {
     case "migrate_large_link_html":
       return runMigrateLargeLinkHtmlTask(
         job as DequeuedJob<ZAdminMaintenanceMigrateLargeLinkHtmlTask>,
+      );
+    case "requeue_skipped_domains":
+      return runRequeueSkippedDomainsTask(
+        job as DequeuedJob<ZAdminMaintenanceRequeueSkippedDomainsTask>,
       );
     default: {
       const exhaustiveCheck: never = task;

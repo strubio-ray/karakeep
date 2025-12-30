@@ -213,7 +213,8 @@
                     "enum": [
                       "success",
                       "failure",
-                      "pending"
+                      "pending",
+                      "skipped"
                     ]
                   },
                   "author": {

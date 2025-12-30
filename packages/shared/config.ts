@@ -208,6 +208,15 @@ const allEnv = z.object({
         .filter((p) => p),
     )
     .optional(),
+  CRAWLER_SKIPPED_DOMAINS: z
+    .string()
+    .transform((val) =>
+      val
+        .split(",")
+        .map((p) => p.trim().toLowerCase())
+        .filter((p) => p),
+    )
+    .optional(),
 
   // Database configuration
   DB_WAL_MODE: stringBool("false"),
@@ -330,6 +339,7 @@ const serverConfigSchema = allEnv.transform((val, ctx) => {
               maxRequests: val.CRAWLER_DOMAIN_RATE_LIMIT_MAX_REQUESTS,
             }
           : null,
+      skippedDomains: val.CRAWLER_SKIPPED_DOMAINS,
     },
     ocr: {
       langs: val.OCR_LANGS,

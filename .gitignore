@@ -66,3 +66,6 @@ auth_failures.log
 
 # Local directory for AI agent contexts
 .aicontext/
+
+# Test/debug archive files
+*_full_page_archive.html

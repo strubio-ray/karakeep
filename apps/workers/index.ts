@@ -3,6 +3,7 @@ import "dotenv/config";
 import { buildServer } from "server";
 
 import {
+  AdminMaintenanceQueue,
   loadAllPlugins,
   prepareQueue,
   startQueue,
@@ -66,6 +67,34 @@ async function main() {
   );
 
   await startQueue();
+
+  // Trigger re-queue of skipped domains on startup if both crawler and adminMaintenance workers are enabled
+  if (
+    workers.some((w) => w.name === "crawler") &&
+    workers.some((w) => w.name === "adminMaintenance")
+  ) {
+    const skippedDomains = serverConfig.crawler.skippedDomains ?? [];
+    // Create idempotency key based on date and config hash
+    // This ensures: same config + same day = one execution, config changes = new execution
+    const configHash = [...skippedDomains].sort().join(",");
+    const today = new Date().toISOString().split("T")[0];
+    const idempotencyKey = `requeue_skipped_domains:${today}:${configHash}`;
+
+    logger.info(
+      `[Workers] Triggering requeue_skipped_domains task (idempotency key: ${idempotencyKey})`,
+    );
+
+    try {
+      await AdminMaintenanceQueue.enqueue(
+        { type: "requeue_skipped_domains" },
+        { idempotencyKey },
+      );
+    } catch (error) {
+      logger.error(
+        `[Workers] Failed to trigger requeue_skipped_domains: ${error}`,
+      );
+    }
+  }
 
   if (workers.some((w) => w.name === "feed")) {
     FeedRefreshingWorker.start();

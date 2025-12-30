@@ -261,7 +261,7 @@ export const bookmarkLinks = sqliteTable(
     contentAssetId: text("contentAssetId"),
     crawledAt: integer("crawledAt", { mode: "timestamp" }),
     crawlStatus: text("crawlStatus", {
-      enum: ["pending", "failure", "success"],
+      enum: ["pending", "failure", "success", "skipped"],
     }).default("pending"),
     crawlStatusCode: integer("crawlStatusCode").default(200),
   },

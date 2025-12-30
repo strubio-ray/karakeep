@@ -90,28 +90,58 @@ export type UrlValidationResult =
   | { ok: true; url: URL }
   | { ok: false; reason: string };
 
-function hostnameMatchesAnyPattern(
+/**
+ * Matches a hostname against a pattern.
+ * Supported patterns:
+ * - "example.com" - exact match
+ * - ".example.com" - matches example.com and all subdomains
+ * - "*.example.com" - matches subdomains only (not example.com itself)
+ * - "." - matches everything
+ */
+function hostnameMatchesPattern(hostname: string, pattern: string): boolean {
+  if (pattern === ".") {
+    return true;
+  }
+
+  // Handle *.domain.com pattern (subdomains only)
+  if (pattern.startsWith("*.")) {
+    const suffix = pattern.slice(1); // Remove "*", keep "."
+    return hostname.endsWith(suffix) && hostname !== pattern.slice(2);
+  }
+
+  return (
+    pattern === hostname ||
+    (pattern.startsWith(".") && hostname.endsWith(pattern)) ||
+    hostname.endsWith("." + pattern)
+  );
+}
+
+export function hostnameMatchesAnyPattern(
   hostname: string,
   patterns: string[],
 ): boolean {
-  function hostnameMatchesPattern(hostname: string, pattern: string): boolean {
-    if (pattern === ".") {
-      return true;
-    }
-
-    return (
-      pattern === hostname ||
-      (pattern.startsWith(".") && hostname.endsWith(pattern)) ||
-      hostname.endsWith("." + pattern)
-    );
-  }
-
   for (const pattern of patterns) {
     if (hostnameMatchesPattern(hostname, pattern)) {
       return true;
     }
   }
   return false;
+}
+
+/**
+ * Checks if a URL's domain should be skipped based on CRAWLER_SKIPPED_DOMAINS config.
+ */
+export function shouldSkipDomain(url: string): boolean {
+  const skippedDomains = serverConfig.crawler.skippedDomains;
+  if (!skippedDomains || skippedDomains.length === 0) {
+    return false;
+  }
+  try {
+    const hostname = new URL(url).hostname.toLowerCase();
+    return hostnameMatchesAnyPattern(hostname, skippedDomains);
+  } catch {
+    return false;
+  }
 }
 
 function isHostnameAllowedForInternalAccess(hostname: string): boolean {

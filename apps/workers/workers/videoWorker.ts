@@ -3,7 +3,7 @@ import * as os from "os";
 import path from "path";
 import { execa } from "execa";
 import { workerStatsCounter } from "metrics";
-import { getProxyAgent, validateUrl } from "network";
+import { getProxyAgent, shouldSkipDomain, validateUrl } from "network";
 
 import { db } from "@karakeep/db";
 import { AssetTypes } from "@karakeep/db/schema";
@@ -101,6 +101,13 @@ async function runWorker(job: DequeuedJob<ZVideoRequest>) {
   if (!serverConfig.crawler.downloadVideo) {
     logger.info(
       `[VideoCrawler][${jobId}] Skipping video download from "${url}", because it is disabled in the config.`,
+    );
+    return;
+  }
+
+  if (shouldSkipDomain(url)) {
+    logger.info(
+      `[VideoCrawler][${jobId}] Skipping video download from "${url}" - domain is in skip list`,
     );
     return;
   }
